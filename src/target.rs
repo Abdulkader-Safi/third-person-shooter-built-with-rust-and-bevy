@@ -1,3 +1,4 @@
+use crate::menu::GameState;
 use crate::player::Player;
 use bevy::prelude::*;
 
@@ -9,8 +10,11 @@ impl Plugin for TargetPlugin {
             .add_systems(Startup, spawn_targets)
             .add_systems(
                 Update,
+                shoot.run_if(in_state(GameState::Playing)),
+            )
+            .add_systems(
+                Update,
                 (
-                    shoot,
                     handle_hits,
                     update_health_bars,
                     update_hit_flash,
