@@ -1,51 +1,75 @@
+use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
+use bevy::window::{CursorGrabMode, CursorOptions};
 
 pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_player)
-            .add_systems(Update, player_movement);
+        app.add_systems(Startup, (spawn_player, lock_cursor))
+            .add_systems(Update, (player_rotation, player_movement));
     }
 }
 
 #[derive(Component)]
-struct Player;
+pub struct Player {
+    pub yaw: f32,
+}
+
+impl Default for Player {
+    fn default() -> Self {
+        Self { yaw: 0.0 }
+    }
+}
 
 #[derive(Component)]
 struct Speed {
     value: f32,
 }
 
+fn lock_cursor(mut cursor_options: Single<&mut CursorOptions>) {
+    cursor_options.grab_mode = CursorGrabMode::Locked;
+    cursor_options.visible = false;
+}
+
+fn player_rotation(
+    mouse_motion: Res<AccumulatedMouseMotion>,
+    mut player_q: Query<(&mut Transform, &mut Player)>,
+) {
+    let sensitivity = 0.003;
+
+    for (mut transform, mut player) in player_q.iter_mut() {
+        player.yaw -= mouse_motion.delta.x * sensitivity;
+        transform.rotation = Quat::from_rotation_y(player.yaw);
+    }
+}
+
 fn player_movement(
-    keys: Res<Input<KeyCode>>,
+    keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     mut player_q: Query<(&mut Transform, &Speed), With<Player>>,
-    cam_q: Query<&Transform, (With<Camera3d>, Without<Player>)>,
 ) {
     for (mut player_transform, player_speed) in player_q.iter_mut() {
-        let cam = match cam_q.get_single() {
-            Ok(c) => c,
-            Err(e) => Err(format!("Error retrieving camera: {}", e)).unwrap(),
-        };
+        let forward = player_transform.forward();
+        let right = player_transform.right();
 
         let mut direction = Vec3::ZERO;
 
-        if keys.pressed(KeyCode::W) {
-            direction += cam.forward();
+        if keys.pressed(KeyCode::KeyW) {
+            direction += *forward;
         }
-        if keys.pressed(KeyCode::S) {
-            direction += cam.back();
+        if keys.pressed(KeyCode::KeyS) {
+            direction -= *forward;
         }
-        if keys.pressed(KeyCode::D) {
-            direction += cam.right();
+        if keys.pressed(KeyCode::KeyD) {
+            direction += *right;
         }
-        if keys.pressed(KeyCode::A) {
-            direction += cam.left();
+        if keys.pressed(KeyCode::KeyA) {
+            direction -= *right;
         }
 
         direction.y = 0.0;
-        let movement = direction.normalize_or_zero() * player_speed.value * time.delta_seconds();
+        let movement = direction.normalize_or_zero() * player_speed.value * time.delta_secs();
         player_transform.translation += movement;
     }
 }
@@ -55,16 +79,11 @@ fn spawn_player(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let player = (
-        PbrBundle {
-            mesh: meshes.add(Mesh::from(shape::Cube::new(1.0))),
-            material: materials.add(Color::BLUE.into()),
-            transform: Transform::from_xyz(0.0, 0.5, 0.0),
-            ..default()
-        },
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
+        MeshMaterial3d(materials.add(Color::srgb(0.0, 0.0, 1.0))),
+        Transform::from_xyz(0.0, 0.5, 0.0),
         Speed { value: 2.0 },
-        Player,
-    );
-
-    commands.spawn(player);
+        Player::default(),
+    ));
 }
