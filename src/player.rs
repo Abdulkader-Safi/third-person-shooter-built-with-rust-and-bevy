@@ -1,16 +1,18 @@
 use crate::menu::GameState;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
+use bevy_rapier3d::prelude::*;
 
 pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_player)
-            .add_systems(
-                Update,
-                (player_rotation, player_movement).run_if(in_state(GameState::Playing)),
-            );
+        app.add_systems(Startup, spawn_player).add_systems(
+            Update,
+            (player_rotation, player_movement)
+                .chain()
+                .run_if(in_state(GameState::Playing)),
+        );
     }
 }
 
@@ -45,9 +47,9 @@ fn player_rotation(
 fn player_movement(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
-    mut player_q: Query<(&mut Transform, &Speed), With<Player>>,
+    mut player_q: Query<(&Transform, &Speed, &mut KinematicCharacterController), With<Player>>,
 ) {
-    for (mut player_transform, player_speed) in player_q.iter_mut() {
+    for (player_transform, player_speed, mut controller) in player_q.iter_mut() {
         let forward = player_transform.forward();
         let right = player_transform.right();
 
@@ -68,7 +70,7 @@ fn player_movement(
 
         direction.y = 0.0;
         let movement = direction.normalize_or_zero() * player_speed.value * time.delta_secs();
-        player_transform.translation += movement;
+        controller.translation = Some(movement);
     }
 }
 
@@ -81,7 +83,11 @@ fn spawn_player(
         Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
         MeshMaterial3d(materials.add(Color::srgb(0.0, 0.0, 1.0))),
         Transform::from_xyz(0.0, 0.5, 0.0),
-        Speed { value: 2.0 },
+        Speed { value: 5.0 },
         Player::default(),
+        // Physics components
+        RigidBody::KinematicPositionBased,
+        Collider::cuboid(0.5, 0.5, 0.5),
+        KinematicCharacterController::default(),
     ));
 }

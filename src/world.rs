@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_rapier3d::prelude::*;
 
 pub struct WorldPlugin;
 
@@ -26,5 +27,8 @@ fn spawn_floor(
     commands.spawn((
         Mesh3d(meshes.add(Plane3d::default().mesh().size(15.0, 15.0))),
         MeshMaterial3d(materials.add(Color::srgb(0.0, 0.39, 0.0))),
+        // Ground collider
+        RigidBody::Fixed,
+        Collider::cuboid(7.5, 0.01, 7.5),
     ));
 }

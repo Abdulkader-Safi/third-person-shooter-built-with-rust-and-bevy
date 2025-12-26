@@ -1,6 +1,7 @@
 use crate::menu::GameState;
 use crate::player::Player;
 use bevy::prelude::*;
+use bevy_rapier3d::prelude::*;
 
 pub struct TargetPlugin;
 
@@ -8,10 +9,7 @@ impl Plugin for TargetPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<HitMessage>()
             .add_systems(Startup, spawn_targets)
-            .add_systems(
-                Update,
-                shoot.run_if(in_state(GameState::Playing)),
-            )
+            .add_systems(Update, shoot.run_if(in_state(GameState::Playing)))
             .add_systems(
                 Update,
                 (
@@ -20,6 +18,7 @@ impl Plugin for TargetPlugin {
                     update_hit_flash,
                     despawn_dead_targets,
                     billboard_health_bars,
+                    update_debug_rays,
                 ),
             );
     }
@@ -53,6 +52,11 @@ pub struct HealthBarFill;
 pub struct HitFlash {
     pub timer: Timer,
     pub original_color: Color,
+}
+
+#[derive(Component)]
+pub struct DebugRay {
+    pub timer: Timer,
 }
 
 #[derive(Message)]
@@ -102,6 +106,9 @@ fn spawn_targets(
                 MeshMaterial3d(target_material),
                 Transform::from_translation(pos),
                 Target::new(100.0),
+                // Rapier physics components
+                RigidBody::Fixed,
+                Collider::cuboid(0.75, 1.0, 0.75),
             ))
             .id();
 
@@ -131,16 +138,20 @@ fn spawn_targets(
 struct ChildOf(Entity);
 
 fn shoot(
+    mut commands: Commands,
     mouse_button: Res<ButtonInput<MouseButton>>,
-    player_q: Query<&Transform, With<Player>>,
-    targets: Query<(Entity, &Transform), With<Target>>,
+    player_q: Query<(Entity, &Transform), With<Player>>,
+    rapier_context: ReadRapierContext,
+    targets: Query<Entity, With<Target>>,
     mut hit_messages: MessageWriter<HitMessage>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     if !mouse_button.just_pressed(MouseButton::Left) {
         return;
     }
 
-    let Ok(player_transform) = player_q.single() else {
+    let Ok((player_entity, player_transform)) = player_q.single() else {
         return;
     };
 
@@ -148,48 +159,70 @@ fn shoot(
     let player_forward = *player_transform.forward();
 
     // Shoot from player position in player's forward direction
-    let ray_origin = player_pos + Vec3::Y * 0.5; // Shoot from player center
+    let ray_origin = player_pos + Vec3::Y * 0.5;
     let ray_direction = player_forward;
+    let max_distance = 100.0;
 
-    // Simple ray-box intersection for each target, but only if in front of player
-    for (entity, transform) in targets.iter() {
-        // Check if target is in front of player (dot product > 0)
-        let to_target = (transform.translation - player_pos).normalize_or_zero();
-        let dot = player_forward.dot(to_target);
+    // Use rapier's raycasting
+    let Ok(context) = rapier_context.single() else {
+        return;
+    };
 
-        if dot < 0.3 {
-            // Target is not in front of player (need at least ~70 degree cone)
-            continue;
-        }
+    // Exclude player from raycast
+    let filter = QueryFilter::default().exclude_rigid_body(player_entity);
 
-        let half_size = Vec3::new(0.75, 1.0, 0.75);
-        let min = transform.translation - half_size;
-        let max = transform.translation + half_size;
+    let mut hit_entity: Option<(Entity, f32)> = None;
+    context.with_query_pipeline(filter, |query_pipeline| {
+        hit_entity = query_pipeline.cast_ray(ray_origin, ray_direction, max_distance, true);
+    });
 
-        if ray_box_intersection(ray_origin, ray_direction, min, max) {
+    // Determine ray end point for debug visualization
+    let ray_end = if let Some((_, distance)) = hit_entity {
+        ray_origin + ray_direction * distance
+    } else {
+        ray_origin + ray_direction * max_distance
+    };
+
+    // Spawn debug ray visualization
+    let ray_length = (ray_end - ray_origin).length();
+    let ray_center = (ray_origin + ray_end) / 2.0;
+    let ray_rotation = Quat::from_rotation_arc(Vec3::Y, ray_direction);
+
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(0.02, ray_length, 0.02))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgb(1.0, 1.0, 0.0),
+            unlit: true,
+            ..default()
+        })),
+        Transform::from_translation(ray_center).with_rotation(ray_rotation),
+        DebugRay {
+            timer: Timer::from_seconds(1.5, TimerMode::Once),
+        },
+    ));
+
+    // Check if we hit a target
+    if let Some((entity, _)) = hit_entity {
+        if targets.get(entity).is_ok() {
             hit_messages.write(HitMessage {
                 target: entity,
                 damage: 25.0,
             });
-            break; // Only hit one target per shot
         }
     }
 }
 
-fn ray_box_intersection(origin: Vec3, direction: Vec3, min: Vec3, max: Vec3) -> bool {
-    let inv_dir = Vec3::new(1.0 / direction.x, 1.0 / direction.y, 1.0 / direction.z);
-
-    let t1 = (min.x - origin.x) * inv_dir.x;
-    let t2 = (max.x - origin.x) * inv_dir.x;
-    let t3 = (min.y - origin.y) * inv_dir.y;
-    let t4 = (max.y - origin.y) * inv_dir.y;
-    let t5 = (min.z - origin.z) * inv_dir.z;
-    let t6 = (max.z - origin.z) * inv_dir.z;
-
-    let tmin = t1.min(t2).max(t3.min(t4)).max(t5.min(t6));
-    let tmax = t1.max(t2).min(t3.max(t4)).min(t5.max(t6));
-
-    tmax >= 0.0 && tmin <= tmax
+fn update_debug_rays(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut rays: Query<(Entity, &mut DebugRay)>,
+) {
+    for (entity, mut ray) in rays.iter_mut() {
+        ray.timer.tick(time.delta());
+        if ray.timer.is_finished() {
+            commands.entity(entity).despawn();
+        }
+    }
 }
 
 fn handle_hits(

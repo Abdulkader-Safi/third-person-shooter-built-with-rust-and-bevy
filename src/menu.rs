@@ -1,5 +1,11 @@
 use bevy::prelude::*;
+use bevy::ui::UiScale;
 use bevy::window::{CursorGrabMode, CursorOptions, WindowMode, WindowResolution};
+
+const BASE_HEIGHT: f32 = 1080.0;
+
+#[derive(Resource, Default)]
+struct LastWindowHeight(f32);
 
 pub struct MenuPlugin;
 
@@ -7,8 +13,12 @@ impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<GameState>()
             .init_state::<MenuState>()
+            .init_resource::<LastWindowHeight>()
             .add_systems(Startup, setup_menu)
-            .add_systems(OnEnter(GameState::MainMenu), (show_main_menu, unlock_cursor))
+            .add_systems(
+                OnEnter(GameState::MainMenu),
+                (show_main_menu, unlock_cursor),
+            )
             .add_systems(OnExit(GameState::MainMenu), cleanup_menu)
             .add_systems(OnEnter(GameState::Paused), (show_pause_menu, unlock_cursor))
             .add_systems(OnExit(GameState::Paused), cleanup_menu)
@@ -21,6 +31,8 @@ impl Plugin for MenuPlugin {
                     handle_menu_buttons,
                     handle_options_buttons,
                     handle_pause_input,
+                    update_ui_scale_on_change,
+                    update_resolution_buttons_state,
                 ),
             );
     }
@@ -61,6 +73,9 @@ enum OptionsButton {
     Resolution(u32, u32),
     Back,
 }
+
+#[derive(Component)]
+struct ResolutionButton;
 
 #[derive(Component)]
 struct ButtonText;
@@ -230,7 +245,10 @@ fn show_options_menu(mut commands: Commands, window: Single<&Window>) {
                 .with_children(|btn| {
                     btn.spawn((
                         Text::new(fullscreen_text),
-                        TextFont { font_size: 24.0, ..default() },
+                        TextFont {
+                            font_size: 24.0,
+                            ..default()
+                        },
                         TextColor(Color::WHITE),
                         ButtonText,
                     ));
@@ -247,7 +265,11 @@ fn show_options_menu(mut commands: Commands, window: Single<&Window>) {
             ));
 
             // Resolution buttons
-            for (w, h, label) in [(1280u32, 720u32, "1280 x 720"), (1920, 1080, "1920 x 1080"), (2560, 1440, "2560 x 1440")] {
+            for (w, h, label) in [
+                (1280u32, 720u32, "1280 x 720"),
+                (1920, 1080, "1920 x 1080"),
+                (2560, 1440, "2560 x 1440"),
+            ] {
                 parent
                     .spawn((
                         Button,
@@ -260,11 +282,15 @@ fn show_options_menu(mut commands: Commands, window: Single<&Window>) {
                         },
                         BackgroundColor(Color::srgb(0.15, 0.15, 0.15)),
                         OptionsButton::Resolution(w, h),
+                        ResolutionButton,
                     ))
                     .with_children(|btn| {
                         btn.spawn((
                             Text::new(label),
-                            TextFont { font_size: 24.0, ..default() },
+                            TextFont {
+                                font_size: 24.0,
+                                ..default()
+                            },
                             TextColor(Color::WHITE),
                         ));
                     });
@@ -287,7 +313,10 @@ fn show_options_menu(mut commands: Commands, window: Single<&Window>) {
                 .with_children(|btn| {
                     btn.spawn((
                         Text::new("Back"),
-                        TextFont { font_size: 24.0, ..default() },
+                        TextFont {
+                            font_size: 24.0,
+                            ..default()
+                        },
                         TextColor(Color::WHITE),
                     ));
                 });
@@ -347,7 +376,12 @@ fn handle_menu_buttons(
 
 fn handle_options_buttons(
     mut interaction_query: Query<
-        (&Interaction, &OptionsButton, &mut BackgroundColor, &Children),
+        (
+            &Interaction,
+            &OptionsButton,
+            &mut BackgroundColor,
+            &Children,
+        ),
         Changed<Interaction>,
     >,
     mut text_query: Query<&mut Text, With<ButtonText>>,
@@ -368,8 +402,11 @@ fn handle_options_buttons(
 
                         if is_fullscreen {
                             window.mode = WindowMode::Windowed;
+                            // Reset to default resolution when exiting fullscreen
+                            window.resolution = WindowResolution::new(1920, 1080);
                         } else {
-                            window.mode = WindowMode::BorderlessFullscreen(MonitorSelection::Current);
+                            window.mode =
+                                WindowMode::BorderlessFullscreen(MonitorSelection::Current);
                         }
 
                         // Update button text
@@ -385,7 +422,10 @@ fn handle_options_buttons(
                         }
                     }
                     OptionsButton::Resolution(w, h) => {
-                        window.resolution = WindowResolution::new(*w, *h);
+                        // Only change resolution in windowed mode
+                        if matches!(window.mode, WindowMode::Windowed) {
+                            window.resolution = WindowResolution::new(*w, *h);
+                        }
                     }
                     OptionsButton::Back => {
                         next_menu_state.set(MenuState::None);
@@ -420,5 +460,48 @@ fn handle_pause_input(
             }
             _ => {}
         }
+    }
+}
+
+fn update_resolution_buttons_state(
+    window: Single<&Window>,
+    mut buttons: Query<(&mut BackgroundColor, &Children), With<ResolutionButton>>,
+    mut text_query: Query<&mut TextColor>,
+) {
+    let is_fullscreen = matches!(
+        window.mode,
+        WindowMode::Fullscreen(..) | WindowMode::BorderlessFullscreen(_)
+    );
+
+    let (bg_color, text_color) = if is_fullscreen {
+        // Grayed out in fullscreen
+        (Color::srgb(0.1, 0.1, 0.1), Color::srgb(0.4, 0.4, 0.4))
+    } else {
+        // Normal in windowed
+        (Color::srgb(0.15, 0.15, 0.15), Color::WHITE)
+    };
+
+    for (mut bg, children) in buttons.iter_mut() {
+        *bg = bg_color.into();
+        for child in children.iter() {
+            if let Ok(mut tc) = text_query.get_mut(child) {
+                tc.0 = text_color;
+            }
+        }
+    }
+}
+
+fn update_ui_scale_on_change(
+    window: Single<&Window>,
+    mut ui_scale: ResMut<UiScale>,
+    mut last_height: ResMut<LastWindowHeight>,
+) {
+    let current_height = window.height();
+
+    // Only update if height actually changed
+    if (current_height - last_height.0).abs() > 0.1 {
+        last_height.0 = current_height;
+        let scale = current_height / BASE_HEIGHT;
+        ui_scale.0 = scale;
     }
 }
