@@ -1,3 +1,4 @@
+use bevy::asset::AssetMetaCheck;
 use bevy::prelude::*;
 use bevy::window::WindowResolution;
 use bevy_rapier3d::prelude::*;
@@ -17,14 +18,19 @@ use world::WorldPlugin;
 fn main() {
     App::new()
         .add_plugins((
-            DefaultPlugins.set(WindowPlugin {
-                primary_window: Some(Window {
-                    title: "My Bevy Game".into(),
-                    resolution: WindowResolution::new(1920, 1080),
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "My Bevy Game".into(),
+                        resolution: WindowResolution::new(1920, 1080),
+                        ..default()
+                    }),
+                    ..default()
+                })
+                .set(AssetPlugin {
+                    meta_check: AssetMetaCheck::Never,
                     ..default()
                 }),
-                ..default()
-            }),
             RapierPhysicsPlugin::<NoUserData>::default(),
             MenuPlugin,
             PlayerPlugin,
