@@ -62,7 +62,7 @@ fn spawn_player(
             transform: Transform::from_xyz(0.0, 0.5, 0.0),
             ..default()
         },
-        Speed { value: 2.0 },
+        Speed { value: 8.0 },
         Player,
     );
 
