@@ -6,12 +6,14 @@ use bevy_rapier3d::prelude::*;
 mod camera;
 mod menu;
 mod player;
+mod shooting;
 mod target;
 mod world;
 
 use camera::CameraPlugin;
 use menu::MenuPlugin;
 use player::PlayerPlugin;
+use shooting::ShootingPlugin;
 use target::TargetPlugin;
 use world::WorldPlugin;
 
@@ -36,6 +38,7 @@ fn main() {
             PlayerPlugin,
             CameraPlugin,
             WorldPlugin,
+            ShootingPlugin,
             TargetPlugin,
         ))
         .run();

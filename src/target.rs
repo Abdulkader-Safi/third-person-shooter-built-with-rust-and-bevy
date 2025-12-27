@@ -1,5 +1,4 @@
-use crate::menu::GameState;
-use crate::player::Player;
+use crate::shooting::{HitEvent, Shootable};
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
@@ -7,20 +6,16 @@ pub struct TargetPlugin;
 
 impl Plugin for TargetPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<HitMessage>()
-            .add_systems(Startup, spawn_targets)
-            .add_systems(Update, shoot.run_if(in_state(GameState::Playing)))
-            .add_systems(
-                Update,
-                (
-                    handle_hits,
-                    update_health_bars,
-                    update_hit_flash,
-                    despawn_dead_targets,
-                    billboard_health_bars,
-                    update_debug_rays,
-                ),
-            );
+        app.add_systems(Startup, spawn_targets).add_systems(
+            Update,
+            (
+                handle_target_hits,
+                update_health_bars,
+                update_hit_flash,
+                despawn_dead_targets,
+                billboard_health_bars,
+            ),
+        );
     }
 }
 
@@ -55,15 +50,7 @@ pub struct HitFlash {
 }
 
 #[derive(Component)]
-pub struct DebugRay {
-    pub timer: Timer,
-}
-
-#[derive(Message)]
-pub struct HitMessage {
-    pub target: Entity,
-    pub damage: f32,
-}
+struct ChildOf(Entity);
 
 fn spawn_targets(
     mut commands: Commands,
@@ -106,6 +93,7 @@ fn spawn_targets(
                 MeshMaterial3d(target_material),
                 Transform::from_translation(pos),
                 Target::new(100.0),
+                Shootable, // Can be shot by the generic shooting system
                 // Rapier physics components
                 RigidBody::Fixed,
                 Collider::cuboid(0.75, 1.0, 0.75),
@@ -134,106 +122,17 @@ fn spawn_targets(
     }
 }
 
-#[derive(Component)]
-struct ChildOf(Entity);
-
-fn shoot(
+/// Handle hits specifically for Target entities
+fn handle_target_hits(
     mut commands: Commands,
-    mouse_button: Res<ButtonInput<MouseButton>>,
-    player_q: Query<(Entity, &Transform), With<Player>>,
-    rapier_context: ReadRapierContext,
-    targets: Query<Entity, With<Target>>,
-    mut hit_messages: MessageWriter<HitMessage>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    if !mouse_button.just_pressed(MouseButton::Left) {
-        return;
-    }
-
-    let Ok((player_entity, player_transform)) = player_q.single() else {
-        return;
-    };
-
-    let player_pos = player_transform.translation;
-    let player_forward = *player_transform.forward();
-
-    // Shoot from player position in player's forward direction
-    let ray_origin = player_pos + Vec3::Y * 0.5;
-    let ray_direction = player_forward;
-    let max_distance = 100.0;
-
-    // Use rapier's raycasting
-    let Ok(context) = rapier_context.single() else {
-        return;
-    };
-
-    // Exclude player from raycast
-    let filter = QueryFilter::default().exclude_rigid_body(player_entity);
-
-    let mut hit_entity: Option<(Entity, f32)> = None;
-    context.with_query_pipeline(filter, |query_pipeline| {
-        hit_entity = query_pipeline.cast_ray(ray_origin, ray_direction, max_distance, true);
-    });
-
-    // Determine ray end point for debug visualization
-    let ray_end = if let Some((_, distance)) = hit_entity {
-        ray_origin + ray_direction * distance
-    } else {
-        ray_origin + ray_direction * max_distance
-    };
-
-    // Spawn debug ray visualization
-    let ray_length = (ray_end - ray_origin).length();
-    let ray_center = (ray_origin + ray_end) / 2.0;
-    let ray_rotation = Quat::from_rotation_arc(Vec3::Y, ray_direction);
-
-    commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(0.02, ray_length, 0.02))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(1.0, 1.0, 0.0),
-            unlit: true,
-            ..default()
-        })),
-        Transform::from_translation(ray_center).with_rotation(ray_rotation),
-        DebugRay {
-            timer: Timer::from_seconds(1.5, TimerMode::Once),
-        },
-    ));
-
-    // Check if we hit a target
-    if let Some((entity, _)) = hit_entity {
-        if targets.get(entity).is_ok() {
-            hit_messages.write(HitMessage {
-                target: entity,
-                damage: 25.0,
-            });
-        }
-    }
-}
-
-fn update_debug_rays(
-    mut commands: Commands,
-    time: Res<Time>,
-    mut rays: Query<(Entity, &mut DebugRay)>,
-) {
-    for (entity, mut ray) in rays.iter_mut() {
-        ray.timer.tick(time.delta());
-        if ray.timer.is_finished() {
-            commands.entity(entity).despawn();
-        }
-    }
-}
-
-fn handle_hits(
-    mut commands: Commands,
-    mut hit_messages: MessageReader<HitMessage>,
+    mut hit_events: MessageReader<HitEvent>,
     mut targets: Query<(&mut Target, &MeshMaterial3d<StandardMaterial>)>,
     materials: Res<Assets<StandardMaterial>>,
 ) {
-    for message in hit_messages.read() {
-        if let Ok((mut target, material_handle)) = targets.get_mut(message.target) {
-            target.current_health -= message.damage;
+    for event in hit_events.read() {
+        // Only process if this entity is a Target
+        if let Ok((mut target, material_handle)) = targets.get_mut(event.entity) {
+            target.current_health -= event.damage;
             target.current_health = target.current_health.max(0.0);
 
             // Get original color and add flash component
@@ -242,7 +141,7 @@ fn handle_hits(
                 .map(|m| m.base_color)
                 .unwrap_or(Color::srgb(0.8, 0.2, 0.2));
 
-            commands.entity(message.target).insert(HitFlash {
+            commands.entity(event.entity).insert(HitFlash {
                 timer: Timer::from_seconds(0.1, TimerMode::Once),
                 original_color,
             });
