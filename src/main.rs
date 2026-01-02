@@ -8,6 +8,7 @@ mod menu;
 mod player;
 mod shooting;
 mod target;
+mod weapon_ui;
 mod world;
 
 use camera::CameraPlugin;
@@ -15,6 +16,7 @@ use menu::MenuPlugin;
 use player::PlayerPlugin;
 use shooting::ShootingPlugin;
 use target::TargetPlugin;
+use weapon_ui::WeaponUiPlugin;
 use world::WorldPlugin;
 
 fn main() {
@@ -40,6 +42,7 @@ fn main() {
             WorldPlugin,
             ShootingPlugin,
             TargetPlugin,
+            WeaponUiPlugin,
         ))
         .run();
 }

@@ -1,5 +1,5 @@
 use crate::menu::GameState;
-use crate::shooting::Weapon;
+use crate::shooting::{ShootCooldown, WeaponInventory};
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
@@ -86,7 +86,8 @@ fn spawn_player(
         Transform::from_xyz(0.0, 0.5, 0.0),
         Speed { value: 5.0 },
         Player::default(),
-        Weapon::new(25.0), // Starting weapon damage
+        WeaponInventory::default(),
+        ShootCooldown::default(),
         // Physics components
         RigidBody::KinematicPositionBased,
         Collider::cuboid(0.5, 0.5, 0.5),
