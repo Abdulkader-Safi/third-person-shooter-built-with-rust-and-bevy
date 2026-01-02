@@ -1,18 +1,24 @@
-use crate::menu::GameState;
+use super::{ReloadState, WeaponInventory};
 use crate::player::{Player, PlayerHealth};
-use crate::shooting::{ReloadState, WeaponInventory};
+use crate::ui::GameState;
 use bevy::prelude::*;
 
 pub struct WeaponUiPlugin;
 
 impl Plugin for WeaponUiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(GameState::Playing), (spawn_weapon_hud, spawn_health_hud))
-            .add_systems(OnExit(GameState::Playing), (despawn_weapon_hud, despawn_health_hud))
-            .add_systems(
-                Update,
-                (update_weapon_hud, update_health_hud).run_if(in_state(GameState::Playing)),
-            );
+        app.add_systems(
+            OnEnter(GameState::Playing),
+            (spawn_weapon_hud, spawn_health_hud),
+        )
+        .add_systems(
+            OnExit(GameState::Playing),
+            (despawn_weapon_hud, despawn_health_hud),
+        )
+        .add_systems(
+            Update,
+            (update_weapon_hud, update_health_hud).run_if(in_state(GameState::Playing)),
+        );
     }
 }
 

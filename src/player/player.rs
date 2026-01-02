@@ -1,5 +1,5 @@
-use crate::menu::GameState;
-use crate::shooting::{ShootCooldown, WeaponInventory};
+use crate::combat::{ShootCooldown, WeaponInventory};
+use crate::ui::GameState;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
