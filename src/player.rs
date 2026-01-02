@@ -29,6 +29,21 @@ impl Default for Player {
 }
 
 #[derive(Component)]
+pub struct PlayerHealth {
+    pub current: f32,
+    pub max: f32,
+}
+
+impl Default for PlayerHealth {
+    fn default() -> Self {
+        Self {
+            current: 100.0,
+            max: 100.0,
+        }
+    }
+}
+
+#[derive(Component)]
 struct Speed {
     value: f32,
 }
@@ -86,6 +101,7 @@ fn spawn_player(
         Transform::from_xyz(0.0, 0.5, 0.0),
         Speed { value: 5.0 },
         Player::default(),
+        PlayerHealth::default(),
         WeaponInventory::default(),
         ShootCooldown::default(),
         // Physics components

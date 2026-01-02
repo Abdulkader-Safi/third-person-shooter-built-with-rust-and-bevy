@@ -4,7 +4,9 @@ use bevy::window::WindowResolution;
 use bevy_rapier3d::prelude::*;
 
 mod camera;
+mod enemy;
 mod menu;
+mod nav_grid;
 mod player;
 mod shooting;
 mod target;
@@ -12,7 +14,9 @@ mod weapon_ui;
 mod world;
 
 use camera::CameraPlugin;
+use enemy::EnemyPlugin;
 use menu::MenuPlugin;
+use nav_grid::NavGridPlugin;
 use player::PlayerPlugin;
 use shooting::ShootingPlugin;
 use target::TargetPlugin;
@@ -36,12 +40,14 @@ fn main() {
                     ..default()
                 }),
             RapierPhysicsPlugin::<NoUserData>::default(),
+            NavGridPlugin,
             MenuPlugin,
             PlayerPlugin,
             CameraPlugin,
             WorldPlugin,
             ShootingPlugin,
             TargetPlugin,
+            EnemyPlugin,
             WeaponUiPlugin,
         ))
         .run();
