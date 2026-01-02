@@ -1,5 +1,5 @@
-use crate::menu::GameState;
-use crate::player::Player;
+use super::Player;
+use crate::ui::GameState;
 use bevy::input::mouse::{AccumulatedMouseMotion, MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 

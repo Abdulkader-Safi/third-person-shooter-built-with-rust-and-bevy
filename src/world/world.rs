@@ -1,5 +1,5 @@
-use crate::nav_grid::NavGrid;
-use crate::shooting::Shootable;
+use super::NavGrid;
+use crate::combat::Shootable;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 use rand::Rng;

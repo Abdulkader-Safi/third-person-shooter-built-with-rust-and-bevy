@@ -1,7 +1,7 @@
-use crate::menu::GameState;
-use crate::nav_grid::NavGrid;
+use crate::combat::{HitEvent, Shootable};
 use crate::player::{Player, PlayerHealth};
-use crate::shooting::{HitEvent, Shootable};
+use crate::ui::GameState;
+use crate::world::NavGrid;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 use rand::Rng;
@@ -107,10 +107,16 @@ fn spawn_zombies(
     for i in 0..zombie_count {
         // Spawn zombies at edges of the map
         let (x, z) = match i % 4 {
-            0 => (rng.random_range(-45.0..-20.0), rng.random_range(-45.0..45.0)), // West
-            1 => (rng.random_range(20.0..45.0), rng.random_range(-45.0..45.0)),   // East
-            2 => (rng.random_range(-45.0..45.0), rng.random_range(-45.0..-20.0)), // North
-            _ => (rng.random_range(-45.0..45.0), rng.random_range(20.0..45.0)),   // South
+            0 => (
+                rng.random_range(-45.0..-20.0),
+                rng.random_range(-45.0..45.0),
+            ), // West
+            1 => (rng.random_range(20.0..45.0), rng.random_range(-45.0..45.0)), // East
+            2 => (
+                rng.random_range(-45.0..45.0),
+                rng.random_range(-45.0..-20.0),
+            ), // North
+            _ => (rng.random_range(-45.0..45.0), rng.random_range(20.0..45.0)), // South
         };
 
         let pos = Vec3::new(x, 1.0, z);
@@ -220,7 +226,9 @@ fn move_zombies(
         // Rotate to face movement direction
         if move_dir.length_squared() > 0.001 {
             let target_rotation = Quat::from_rotation_y((-move_dir.x).atan2(-move_dir.z));
-            transform.rotation = transform.rotation.slerp(target_rotation, 5.0 * time.delta_secs());
+            transform.rotation = transform
+                .rotation
+                .slerp(target_rotation, 5.0 * time.delta_secs());
         }
     }
 }
@@ -239,7 +247,9 @@ fn zombie_attack(
     for (zombie_transform, mut zombie) in zombies.iter_mut() {
         zombie.attack_cooldown.tick(time.delta());
 
-        let distance = (zombie_transform.translation - player_pos).with_y(0.0).length();
+        let distance = (zombie_transform.translation - player_pos)
+            .with_y(0.0)
+            .length();
 
         // Attack if close enough and cooldown finished
         if distance < 1.5 && zombie.attack_cooldown.is_finished() {
@@ -250,10 +260,7 @@ fn zombie_attack(
     }
 }
 
-fn handle_zombie_hits(
-    mut hit_events: MessageReader<HitEvent>,
-    mut zombies: Query<&mut Zombie>,
-) {
+fn handle_zombie_hits(mut hit_events: MessageReader<HitEvent>, mut zombies: Query<&mut Zombie>) {
     for event in hit_events.read() {
         if let Ok(mut zombie) = zombies.get_mut(event.entity) {
             zombie.health -= event.damage;

@@ -87,10 +87,9 @@ impl NavGrid {
         let min_world = pos - Vec3::new(half_extents.x, 0.0, half_extents.z);
         let max_world = pos + Vec3::new(half_extents.x, 0.0, half_extents.z);
 
-        if let (Some((min_x, min_y)), Some((max_x, max_y))) = (
-            self.world_to_grid(min_world),
-            self.world_to_grid(max_world),
-        ) {
+        if let (Some((min_x, min_y)), Some((max_x, max_y))) =
+            (self.world_to_grid(min_world), self.world_to_grid(max_world))
+        {
             self.set_obstacle_rect(min_x, min_y, max_x, max_y);
         }
     }

@@ -3,25 +3,17 @@ use bevy::prelude::*;
 use bevy::window::WindowResolution;
 use bevy_rapier3d::prelude::*;
 
-mod camera;
-mod enemy;
-mod menu;
-mod nav_grid;
+mod combat;
+mod enemies;
 mod player;
-mod shooting;
-mod target;
-mod weapon_ui;
+mod ui;
 mod world;
 
-use camera::CameraPlugin;
-use enemy::EnemyPlugin;
-use menu::MenuPlugin;
-use nav_grid::NavGridPlugin;
-use player::PlayerPlugin;
-use shooting::ShootingPlugin;
-use target::TargetPlugin;
-use weapon_ui::WeaponUiPlugin;
-use world::WorldPlugin;
+use combat::{ShootingPlugin, WeaponUiPlugin};
+use enemies::{EnemyPlugin, TargetPlugin};
+use player::{CameraPlugin, PlayerPlugin};
+use ui::MenuPlugin;
+use world::{NavGridPlugin, WorldPlugin};
 
 fn main() {
     App::new()
