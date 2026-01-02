@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use bevy::ui::UiScale;
 use bevy::window::{CursorGrabMode, CursorOptions, WindowMode, WindowResolution};
+use std::process;
 
 const BASE_HEIGHT: f32 = 1080.0;
 
@@ -343,7 +344,6 @@ fn handle_menu_buttons(
     colors: Res<MenuColors>,
     mut next_game_state: ResMut<NextState<GameState>>,
     mut next_menu_state: ResMut<NextState<MenuState>>,
-    mut exit: MessageWriter<AppExit>,
 ) {
     for (interaction, button, mut bg_color) in interaction_query.iter_mut() {
         match *interaction {
@@ -360,7 +360,8 @@ fn handle_menu_buttons(
                         next_menu_state.set(MenuState::Options);
                     }
                     MenuButton::Close => {
-                        exit.write(AppExit::Success);
+                        // Use immediate exit to avoid slow cleanup with many physics entities
+                        process::exit(0);
                     }
                 }
             }

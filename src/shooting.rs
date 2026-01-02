@@ -9,20 +9,22 @@ pub struct ShootingPlugin;
 
 impl Plugin for ShootingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<HitEvent>().add_systems(
-            Update,
-            (
-                handle_weapon_switch,
-                handle_reload_input,
-                process_reload,
-                process_burst,
-                shoot,
-                update_shoot_cooldown,
-                update_debug_rays,
+        app.add_message::<HitEvent>()
+            .add_systems(
+                Update,
+                (
+                    handle_weapon_switch,
+                    handle_reload_input,
+                    process_reload,
+                    process_burst,
+                    shoot,
+                    update_shoot_cooldown,
+                )
+                    .chain()
+                    .run_if(in_state(GameState::Playing)),
             )
-                .chain()
-                .run_if(in_state(GameState::Playing)),
-        );
+            // Debug rays should always clean up, even when paused
+            .add_systems(Update, update_debug_rays);
     }
 }
 
