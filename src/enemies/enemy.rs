@@ -18,6 +18,7 @@ impl Plugin for EnemyPlugin {
                     increment_frame_counter,
                     update_zombie_paths,
                     move_zombies,
+                    separate_zombies,
                     zombie_attack,
                     handle_zombie_hits,
                     update_zombie_health_bars,
@@ -74,10 +75,61 @@ pub struct ZombieHealthBarFill;
 #[derive(Component)]
 struct ZombieChildOf(Entity);
 
+/// Generate a random position at the edges of the map
+fn generate_edge_position(rng: &mut impl Rng, quadrant: i32) -> (f32, f32) {
+    match quadrant % 4 {
+        0 => (
+            rng.random_range(-45.0..-20.0),
+            rng.random_range(-45.0..45.0),
+        ), // West
+        1 => (rng.random_range(20.0..45.0), rng.random_range(-45.0..45.0)), // East
+        2 => (
+            rng.random_range(-45.0..45.0),
+            rng.random_range(-45.0..-20.0),
+        ), // North
+        _ => (rng.random_range(-45.0..45.0), rng.random_range(20.0..45.0)), // South
+    }
+}
+
+/// Find a valid spawn position that is walkable and not too close to other zombies
+fn find_valid_spawn_position(
+    nav_grid: &NavGrid,
+    existing: &[Vec3],
+    min_spacing: f32,
+    rng: &mut impl Rng,
+    quadrant: i32,
+) -> Option<Vec3> {
+    for _ in 0..50 {
+        // Max 50 attempts
+        let (x, z) = generate_edge_position(rng, quadrant);
+        let pos = Vec3::new(x, 1.0, z);
+
+        // Check NavGrid walkability
+        if let Some((gx, gy)) = nav_grid.world_to_grid(pos) {
+            if !nav_grid.is_walkable(gx, gy) {
+                continue;
+            }
+        } else {
+            continue;
+        }
+
+        // Check spacing from other zombies
+        let too_close = existing
+            .iter()
+            .any(|&other| (pos - other).with_y(0.0).length() < min_spacing);
+
+        if !too_close {
+            return Some(pos);
+        }
+    }
+    None
+}
+
 fn spawn_zombies(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    nav_grid: Res<NavGrid>,
 ) {
     let mut rng = rand::rng();
 
@@ -101,25 +153,22 @@ fn spawn_zombies(
         ..default()
     });
 
+    // Track spawned positions for spacing check
+    let mut spawned_positions: Vec<Vec3> = Vec::new();
+    let min_spacing = 2.0; // Minimum distance between zombies
+
     // Spawn 40 zombies around the edges of the map
     let zombie_count = 40;
 
     for i in 0..zombie_count {
-        // Spawn zombies at edges of the map
-        let (x, z) = match i % 4 {
-            0 => (
-                rng.random_range(-45.0..-20.0),
-                rng.random_range(-45.0..45.0),
-            ), // West
-            1 => (rng.random_range(20.0..45.0), rng.random_range(-45.0..45.0)), // East
-            2 => (
-                rng.random_range(-45.0..45.0),
-                rng.random_range(-45.0..-20.0),
-            ), // North
-            _ => (rng.random_range(-45.0..45.0), rng.random_range(20.0..45.0)), // South
+        // Find a valid spawn position
+        let Some(pos) =
+            find_valid_spawn_position(&nav_grid, &spawned_positions, min_spacing, &mut rng, i)
+        else {
+            continue; // Skip if no valid position found
         };
 
-        let pos = Vec3::new(x, 1.0, z);
+        spawned_positions.push(pos);
         let path_offset = i as u32; // Distribute offsets evenly
 
         let zombie_entity = commands
@@ -132,10 +181,7 @@ fn spawn_zombies(
                 Shootable,
                 RigidBody::KinematicPositionBased,
                 Collider::capsule_y(0.6, 0.4),
-                KinematicCharacterController {
-                    filter_flags: QueryFilterFlags::EXCLUDE_KINEMATIC,
-                    ..default()
-                },
+                KinematicCharacterController::default(),
             ))
             .id();
 
@@ -315,6 +361,49 @@ fn despawn_dead_zombies(
                 }
             }
             commands.entity(entity).despawn();
+        }
+    }
+}
+
+/// Separation behavior to prevent zombies from clustering
+fn separate_zombies(
+    time: Res<Time>,
+    mut zombies: Query<(Entity, &Transform, &mut KinematicCharacterController), With<Zombie>>,
+) {
+    // Collect all zombie positions first
+    let positions: Vec<(Entity, Vec3)> =
+        zombies.iter().map(|(e, t, _)| (e, t.translation)).collect();
+
+    let separation_radius = 1.5;
+    let separation_strength = 2.0;
+
+    for (entity, transform, mut controller) in zombies.iter_mut() {
+        let mut separation = Vec3::ZERO;
+
+        for (other_entity, other_pos) in &positions {
+            if *other_entity == entity {
+                continue;
+            }
+
+            let diff = transform.translation - *other_pos;
+            let dist = diff.with_y(0.0).length();
+
+            if dist > 0.01 && dist < separation_radius {
+                // Push away from nearby zombies
+                let push =
+                    diff.with_y(0.0).normalize() * (separation_radius - dist) / separation_radius;
+                separation += push;
+            }
+        }
+
+        // Apply separation to existing movement
+        if separation.length_squared() > 0.001 {
+            let separation_movement = separation * separation_strength * time.delta_secs();
+            if let Some(existing) = controller.translation {
+                controller.translation = Some(existing + separation_movement);
+            } else {
+                controller.translation = Some(separation_movement);
+            }
         }
     }
 }
