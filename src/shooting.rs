@@ -376,15 +376,7 @@ fn process_reload(
 fn process_burst(
     mut commands: Commands,
     time: Res<Time>,
-    mut players: Query<
-        (
-            Entity,
-            &Transform,
-            &mut WeaponInventory,
-            &mut BurstState,
-        ),
-        With<Player>,
-    >,
+    mut players: Query<(Entity, &Transform, &mut WeaponInventory, &mut BurstState), With<Player>>,
     rapier_context: ReadRapierContext,
     shootables: Query<Entity, With<Shootable>>,
     mut hit_events: MessageWriter<HitEvent>,
